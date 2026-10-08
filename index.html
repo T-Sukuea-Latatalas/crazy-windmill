@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>認識された空間 - Liminal Horror</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      font-family: 'Courier New', Courier, monospace, sans-serif;
+    }
+
+    #game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* レトロカメラ風・VHS・スキャンライン演出 */
+    #vhs-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 45%, rgba(0, 0, 0, 0.78) 95%);
+    }
+
+    #scanlines {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 11;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0),
+        rgba(255, 255, 255, 0) 2px,
+        rgba(0, 0, 0, 0.28) 2px,
+        rgba(0, 0, 0, 0.28) 4px
+      );
+      opacity: 0.75;
+    }
+
+    /* HUD / UI */
+    #hud {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      pointer-events: none;
+      color: #90ee90;
+      text-shadow: 0 0 4px #00ff00;
+      padding: 16px;
+      font-size: 14px;
+    }
+
+    .hud-header {
+      display: flex;
+      justify-content: space-between;
+      letter-spacing: 2px;
+    }
+
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 8px;
+      height: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    #inventory-status {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      font-size: 15px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 6px 12px;
+      border-left: 3px solid #90ee90;
+    }
+
+    /* アクションプロンプト（PC・スマホ両用） */
+    #interact-prompt {
+      position: absolute;
+      top: 60%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 8px 18px;
+      border: 1px solid #fff;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+      display: none;
+      letter-spacing: 1px;
+    }
+
+    /* スマホ専用アクションボタン */
+    #action-btn-mobile {
+      position: absolute;
+      right: 28px;
+      bottom: 60px;
+      width: 76px;
+      height: 76px;
+      background: rgba(220, 20, 60, 0.65);
+      border: 2px solid #fff;
+      border-radius: 50%;
+      color: #fff;
+      font-weight: bold;
+      font-size: 14px;
+      display: none;
+      pointer-events: auto;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+      box-shadow: 0 0 12px rgba(255, 0, 0, 0.5);
+    }
+    #action-btn-mobile:active {
+      background: rgba(255, 0, 0, 0.9);
+      transform: scale(0.95);
+    }
+
+    /* 警告バナー */
+    #alert-banner {
+      position: absolute;
+      top: 25%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 28px;
+      font-weight: 900;
+      color: #ff1a1a;
+      text-shadow: 0 0 10px #700, 0 0 20px #000;
+      letter-spacing: 5px;
+      display: none;
+      background: rgba(20, 0, 0, 0.85);
+      padding: 12px 28px;
+      border: 2px solid #900;
+      text-align: center;
+      animation: alertPulse 0.4s infinite alternate;
+    }
+
+    @keyframes alertPulse {
+      from { opacity: 0.8; transform: translate(-50%, -50%) scale(0.98); }
+      to { opacity: 1; transform: translate(-50%, -50%) scale(1.02); }
+    }
+
+    /* モバイルバーチャルスティック */
+    #joystick-zone {
+      position: absolute;
+      left: 10px;
+      bottom: 20px;
+      width: 140px;
+      height: 140px;
+      z-index: 25;
+      pointer-events: auto;
+      display: none;
+    }
+    #joystick-base {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-radius: 50%;
+      top: 10px;
+      left: 10px;
+    }
+    #joystick-stick {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background: rgba(255, 255, 255, 0.45);
+      border-radius: 50%;
+      top: 45px;
+      left: 45px;
+      transform: translate(0, 0);
+    }
+
+    /* タッチ視点操作用エリア */
+    #touch-look-zone {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 50%;
+      height: 100%;
+      z-index: 15;
+      display: none;
+    }
+
+    /* タイトル/終了画面 */
+    #screen-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 5, 8, 0.94);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #e0e0e0;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #screen-overlay h1 {
+      font-size: 32px;
+      margin-bottom: 12px;
+      letter-spacing: 4px;
+      color: #fff;
+      text-shadow: 0 0 10px rgba(255,255,255,0.4);
+    }
+
+    #screen-overlay p {
+      font-size: 14px;
+      line-height: 1.8;
+      max-width: 580px;
+      margin-bottom: 24px;
+      color: #aaa;
+    }
+
+    .start-btn {
+      padding: 12px 32px;
+      font-size: 16px;
+      background: #111;
+      color: #00ff66;
+      border: 2px solid #00ff66;
+      cursor: pointer;
+      font-weight: bold;
+      letter-spacing: 2px;
+      transition: all 0.2s;
+    }
+    .start-btn:hover {
+      background: #00ff66;
+      color: #000;
+      box-shadow: 0 0 15px #00ff66;
+    }
+  </style>
+
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <canvas id="game-canvas"></canvas>
+
+  <div id="vhs-overlay"></div>
+  <div id="scanlines"></div>
+
+  <div id="hud">
+    <div class="hud-header">
+      <div>REC ● [00:14:02:19]</div>
+      <div>FPS: ~22 (CAM_04)</div>
+    </div>
+    <div id="crosshair"></div>
+    <div id="inventory-status">所持品: なし</div>
+    <div id="interact-prompt">[E] 拾う</div>
+    <div id="alert-banner">まずい“認識”された</div>
+  </div>
+
+  <div id="action-btn-mobile">アクション</div>
+  <div id="joystick-zone">
+    <div id="joystick-base"></div>
+    <div id="joystick-stick"></div>
+  </div>
+  <div id="touch-look-zone"></div>
+
+  <!-- スタート/ゲームオーバー/クリア画面 -->
+  <div id="screen-overlay">
+    <h1 id="screen-title">偽りの青空</h1>
+    <p id="screen-desc">
+      ここは閉ざされた偽物の部屋。<br>
+      小屋の外に出ると、異形の風車があなたを追跡してきます。<br>
+      散らばる4つの砲弾を集め、4門の大砲で撃ち落としてください。<br>
+      すべて壊せば、どこかに「黒い出口」が開きます。
+    </p>
+    <button class="start-btn" id="start-btn">探索を開始する</button>
+  </div>
+
+<script>
+/**
+ * 3D LIMINAL SPACE HORROR - 完全統合スクリプト
+ */
+
+// --- サウンド生成（Web Audio API） ---
+class SoundManager {
+  constructor() {
+    this.ctx = null;
+  }
+  init() {
+    if (!this.ctx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioContext();
+    }
+  }
+  playAlarm() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.6);
+    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.65);
+  }
+  playCannon() {
+    if (!this.ctx) return;
+    // ノイズバースト（爆発音）
+    const bufferSize = this.ctx.sampleRate * 1.0;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(600, this.ctx.currentTime);
+    filter.frequency.linearRampToValueAtTime(60, this.ctx.currentTime + 0.8);
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.9);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+    noise.start();
+  }
+  playPickup() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+    osc.frequency.setValueAtTime(540, this.ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.25);
+  }
+}
+const audio = new SoundManager();
+
+// --- Twemoji / 絵文字テクスチャローダー ---
+// TwemojiのSVG CDN URLから読み込み、フォールバックとしてCanvas描画を行う
+const emojiMap = {
+  'face_normal': { code: '1f601', char: '😁' },
+  'face_scared': { code: '1f631', char: '😱' },
+  'hand_up':     { code: '1f446', char: '👆' },
+  'hand_right':  { code: '1f449', char: '👉' },
+  'hand_down':   { code: '1f447', char: '👇' },
+  'hand_left':   { code: '1f448', char: '👈' },
+  'hand_point':  { code: '1fac5', char: '🫵' },
+  'pole_part':   { code: '1facb', char: '🫪' } // または手
+};
+
+const textures = {};
+function createEmojiTexture(char, code) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  
+  // 初期はCanvasで直接描画（フォールバック）
+  ctx.clearRect(0, 0, 128, 128);
+  ctx.font = '90px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(char, 64, 70);
+
+  const tex = new THREE.CanvasTexture(canvas);
+
+  // Twemoji CDNから高品質SVGをロード試行
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = `https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/${code}.svg`;
+  img.onload = () => {
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.drawImage(img, 0, 0, 128, 128);
+    tex.needsUpdate = true;
+  };
+
+  return tex;
+}
+
+function initTextures() {
+  for (const key in emojiMap) {
+    textures[key] = createEmojiTexture(emojiMap[key].char, emojiMap[key].code);
+  }
+}
+initTextures();
+
+// --- プロシージャル環境テクスチャ生成 ---
+function createFakeSkyTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  // 不自然に平面的で明るい青空
+  ctx.fillStyle = '#4fa8ff';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // 不気味に貼り付けられたような安っぽい平坦な雲
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 7; i++) {
+    const cx = (i * 85 + 40) % 512;
+    const cy = 100 + (i % 3) * 110;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 35, 0, Math.PI * 2);
+    ctx.arc(cx + 25, cy - 10, 30, 0, Math.PI * 2);
+    ctx.arc(cx + 45, cy + 5, 28, 0, Math.PI * 2);
+    ctx.arc(cx - 20, cy + 5, 25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 2);
+  return tex;
+}
+
+function createGroundTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  // くすんだ乾いた芝生・コンクリートの中間色
+  ctx.fillStyle = '#4e5a42';
+  ctx.fillRect(0, 0, 512, 512);
+
+  // ノイズテクスチャ
+  for (let i = 0; i < 15000; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const b = Math.random() * 40 - 20;
+    ctx.fillStyle = `rgba(${75 + b}, ${90 + b}, ${65 + b}, 0.5)`;
+    ctx.fillRect(x, y, 2, 2);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(25, 25);
+  return tex;
+}
+
+// --- ゲーム状態変数 ---
+const ROOM_SIZE = 140; // 空間の広さ
+let scene, camera, renderer;
+let isGameRunning = false;
+let isRecognized = false;
+let isEscaped = false;
+let hasBall = false;
+let currentInteractTarget = null;
+
+// プレイヤー管理
+const player = {
+  pos: new THREE.Vector3(0, 1.6, 55), // スタート位置（小屋の奥）
+  rot: { yaw: 0, pitch: 0 },
+  speed: 0.16
+};
+
+// 入力状態
+const keys = {};
+const touchState = {
+  active: false,
+  originX: 0,
+  originY: 0,
+  moveX: 0,
+  moveY: 0
+};
+let isMobile = ('ontouchstart' in window);
+
+// エンティティ群
+let windmillGroup, windmillFace, windmillWings = [], windmillPoles = [];
+let windmillState = {
+  activeWings: 4,
+  isFleeing: false,
+  pos: new THREE.Vector3(0, 0, -20),
+  rotAngle: 0
+};
+
+const cannons = [];
+const balls = [];
+const flyingProjectiles = [];
+let exitDoorMesh = null;
+
+// --- Three.js 初期化 ---
+function initScene() {
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x5a9be6, 0.008); // わずかに青いリミナルフォグ
+
+  camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 400);
+  camera.position.copy(player.pos);
+
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game-canvas'), antialias: false });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1); // カクカク感と低品質カメラ感維持
+
+  // 環境光（不自然な均一光）
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+  scene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xfff7e6, 0.45);
+  dirLight.position.set(20, 80, 20);
+  scene.add(dirLight);
+
+  buildEnclosure();
+  buildCabin();
+  buildWindmill();
+  spawnCannonsAndBalls();
+  buildExitDoor();
+}
+
+// 立方体型閉鎖空間（偽の青空天井・壁）
+function buildEnclosure() {
+  const fakeSkyTex = createFakeSkyTexture();
+  const groundTex = createGroundTexture();
+
+  // 床
+  const groundGeo = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE);
+  const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // 天井（偽空）
+  const ceilGeo = new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE);
+  const ceilMat = new THREE.MeshBasicMaterial({ map: fakeSkyTex });
+  const ceiling = new THREE.Mesh(ceilGeo, ceilMat);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = 35;
+  scene.add(ceiling);
+
+  // 4方の壁（偽空が平面的に貼られた壁）
+  const wallMat = new THREE.MeshBasicMaterial({ map: fakeSkyTex });
+  const half = ROOM_SIZE / 2;
+  const height = 35;
+
+  const wallN = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_SIZE, height), wallMat);
+  wallN.position.set(0, height / 2, -half);
+  scene.add(wallN);
+
+  const wallS = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_SIZE, height), wallMat);
+  wallS.position.set(0, height / 2, half);
+  wallS.rotation.y = Math.PI;
+  scene.add(wallS);
+
+  const wallE = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_SIZE, height), wallMat);
+  wallE.position.set(half, height / 2, 0);
+  wallE.rotation.y = -Math.PI / 2;
+  scene.add(wallE);
+
+  const wallW = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_SIZE, height), wallMat);
+  wallW.position.set(-half, height / 2, 0);
+  wallW.rotation.y = Math.PI / 2;
+  scene.add(wallW);
+}
+
+// スタート地点：質素な木造小屋
+function buildCabin() {
+  const cabinMat = new THREE.MeshLambertMaterial({ color: 0x4a3525 });
+  const cabinGroup = new THREE.Group();
+
+  // 小屋サイズ：横10, 奥12, 高5
+  const wallL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5, 12), cabinMat);
+  wallL.position.set(-5, 2.5, 55);
+  cabinGroup.add(wallL);
+
+  const wallR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5, 12), cabinMat);
+  wallR.position.set(5, 2.5, 55);
+  cabinGroup.add(wallR);
+
+  const wallB = new THREE.Mesh(new THREE.BoxGeometry(10.4, 5, 0.4), cabinMat);
+  wallB.position.set(0, 2.5, 61);
+  cabinGroup.add(wallB);
+
+  // 屋根
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(11, 0.4, 13), cabinMat);
+  roof.position.set(0, 5, 55);
+  cabinGroup.add(roof);
+
+  // 前壁（ドア開口部を残す左右の壁）
+  const wallFrontL = new THREE.Mesh(new THREE.BoxGeometry(3.6, 5, 0.4), cabinMat);
+  wallFrontL.position.set(-3.2, 2.5, 49);
+  cabinGroup.add(wallFrontL);
+
+  const wallFrontR = new THREE.Mesh(new THREE.BoxGeometry(3.6, 5, 0.4), cabinMat);
+  wallFrontR.position.set(3.2, 2.5, 49);
+  cabinGroup.add(wallFrontR);
+
+  scene.add(cabinGroup);
+}
+
+// キチガイ風車（Twemoji Spriteで構築）
+function buildWindmill() {
+  windmillGroup = new THREE.Group();
+  windmillGroup.position.copy(windmillState.pos);
+
+  // 支柱（🫵 や 🫪 が縦に連なる）
+  for (let i = 0; i < 5; i++) {
+    const poleMat = new THREE.SpriteMaterial({ map: textures.pole_part || textures.hand_point, transparent: true });
+    const poleSprite = new THREE.Sprite(poleMat);
+    poleSprite.scale.set(3, 3, 1);
+    poleSprite.position.set(0, 1.8 + i * 2.2, 0);
+    windmillGroup.add(poleSprite);
+    windmillPoles.push(poleSprite);
+  }
+
+  // 中心：顔
+  const faceMat = new THREE.SpriteMaterial({ map: textures.face_normal, transparent: true });
+  windmillFace = new THREE.Sprite(faceMat);
+  windmillFace.scale.set(5.5, 5.5, 1);
+  windmillFace.position.set(0, 13, 0);
+  windmillGroup.add(windmillFace);
+
+  // 羽根（4本の手）
+  // 0:上, 1:右, 2:下, 3:左
+  const wingKeys = ['hand_up', 'hand_right', 'hand_down', 'hand_left'];
+  for (let i = 0; i < 4; i++) {
+    const wingMat = new THREE.SpriteMaterial({ map: textures[wingKeys[i]], transparent: true });
+    const wingSprite = new THREE.Sprite(wingMat);
+    wingSprite.scale.set(4.2, 4.2, 1);
+    wingSprite.userData = { angleIndex: i, isAlive: true };
+    windmillGroup.add(wingSprite);
+    windmillWings.push(wingSprite);
+  }
+
+  scene.add(windmillGroup);
+}
+
+// 砲弾と大砲の配置
+function spawnCannonsAndBalls() {
+  // 大砲 4台の配置
+  const cannonCoords = [
+    { x: -35, z: 20, rot: 0.3 },
+    { x:  35, z: 20, rot: -0.3 },
+    { x: -25, z: -25, rot: 1.2 },
+    { x:  25, z: -25, rot: -1.2 }
+  ];
+
+  cannonCoords.forEach((coord, idx) => {
+    const cGroup = new THREE.Group();
+    cGroup.position.set(coord.x, 0, coord.z);
+    cGroup.rotation.y = coord.rot;
+
+    // 台座
+    const baseGeo = new THREE.BoxGeometry(2.5, 0.8, 3.5);
+    const baseMat = new THREE.MeshLambertMaterial({ color: 0x332211 });
+    const baseMesh = new THREE.Mesh(baseGeo, baseMat);
+    baseMesh.position.y = 0.4;
+    cGroup.add(baseMesh);
+
+    // 砲身
+    const barrelGeo = new THREE.CylinderGeometry(0.5, 0.7, 3.8, 12);
+    const barrelMat = new THREE.MeshLambertMaterial({ color: 0x22252a });
+    const barrelMesh = new THREE.Mesh(barrelGeo, barrelMat);
+    barrelMesh.rotation.x = -Math.PI / 3.5;
+    barrelMesh.position.set(0, 1.4, -0.2);
+    cGroup.add(barrelMesh);
+
+    cGroup.userData = { id: idx, isFired: false, type: 'cannon' };
+    scene.add(cGroup);
+    cannons.push(cGroup);
+  });
+
+  // 砲弾 4個の配置
+  const ballCoords = [
+    { x: -20, z: 42 },
+    { x:  22, z: 35 },
+    { x: -45, z: -10 },
+    { x:  40, z: -5 }
+  ];
+
+  ballCoords.forEach((coord, idx) => {
+    const ballGeo = new THREE.SphereGeometry(0.5, 12, 12);
+    const ballMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.8 });
+    const ballMesh = new THREE.Mesh(ballGeo, ballMat);
+    ballMesh.position.set(coord.x, 0.5, coord.z);
+    ballMesh.userData = { id: idx, isPicked: false, type: 'ball' };
+    scene.add(ballMesh);
+    balls.push(ballMesh);
+  });
+}
+
+// ドリームコア風の真っ黒な出口
+function buildExitDoor() {
+  const doorGeo = new THREE.PlaneGeometry(8, 14);
+  const doorMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+  exitDoorMesh = new THREE.Mesh(doorGeo, doorMat);
+  // 北壁（奥）に埋め込み
+  exitDoorMesh.position.set(0, 7, -(ROOM_SIZE / 2) + 0.1);
+  exitDoorMesh.visible = false;
+  scene.add(exitDoorMesh);
+}
+
+// --- 入力・コントロール処理 ---
+function setupControls() {
+  // キーボード
+  window.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+    if (e.code === 'KeyE') handleInteract();
+  });
+  window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+  });
+
+  // マウス視点移動（ポインターロック）
+  const canvas = document.getElementById('game-canvas');
+  canvas.addEventListener('click', () => {
+    if (isGameRunning && !isMobile) {
+      canvas.requestPointerLock();
+    }
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === canvas && isGameRunning) {
+      player.rot.yaw -= e.movementX * 0.0024;
+      player.rot.pitch -= e.movementY * 0.0024;
+      player.rot.pitch = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, player.rot.pitch));
+    }
+  });
+
+  // スマホ判定とタッチUI
+  if (isMobile) {
+    document.getElementById('joystick-zone').style.display = 'block';
+    document.getElementById('touch-look-zone').style.display = 'block';
+    setupTouchControls();
+  }
+
+  // アクションボタン（スマホ用）
+  const actBtn = document.getElementById('action-btn-mobile');
+  actBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    handleInteract();
+  });
+  actBtn.addEventListener('click', handleInteract);
+
+  // スタートボタン
+  document.getElementById('start-btn').addEventListener('click', startGame);
+
+  window.addEventListener('resize', onWindowResize);
+}
+
+function setupTouchControls() {
+  const stickZone = document.getElementById('joystick-zone');
+  const stick = document.getElementById('joystick-stick');
+  let stickTouchId = null;
+
+  stickZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    stickTouchId = touch.identifier;
+    const rect = stickZone.getBoundingClientRect();
+    touchState.originX = rect.left + rect.width / 2;
+    touchState.originY = rect.top + rect.height / 2;
+    touchState.active = true;
+  });
+
+  stickZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier === stickTouchId) {
+        const dx = touch.clientX - touchState.originX;
+        const dy = touch.clientY - touchState.originY;
+        const dist = Math.min(45, Math.hypot(dx, dy));
+        const angle = Math.atan2(dy, dx);
+
+        const nx = Math.cos(angle) * dist;
+        const ny = Math.sin(angle) * dist;
+        stick.style.transform = `translate(${nx}px, ${ny}px)`;
+
+        touchState.moveX = nx / 45;
+        touchState.moveY = ny / 45;
+      }
+    }
+  });
+
+  const resetStick = (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === stickTouchId) {
+        stickTouchId = null;
+        touchState.active = false;
+        touchState.moveX = 0;
+        touchState.moveY = 0;
+        stick.style.transform = `translate(0px, 0px)`;
+      }
+    }
+  };
+  stickZone.addEventListener('touchend', resetStick);
+  stickZone.addEventListener('touchcancel', resetStick);
+
+  // 右画面ドラッグでカメラ回転
+  const lookZone = document.getElementById('touch-look-zone');
+  let lookTouchId = null;
+  let lastLookX = 0, lastLookY = 0;
+
+  lookZone.addEventListener('touchstart', (e) => {
+    const touch = e.changedTouches[0];
+    lookTouchId = touch.identifier;
+    lastLookX = touch.clientX;
+    lastLookY = touch.clientY;
+  });
+
+  lookZone.addEventListener('touchmove', (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.identifier === lookTouchId) {
+        const dx = touch.clientX - lastLookX;
+        const dy = touch.clientY - lastLookY;
+        lastLookX = touch.clientX;
+        lastLookY = touch.clientY;
+
+        player.rot.yaw -= dx * 0.005;
+        player.rot.pitch -= dy * 0.005;
+        player.rot.pitch = Math.max(-Math.PI / 2.3, Math.min(Math.PI / 2.3, player.rot.pitch));
+      }
+    }
+  });
+
+  const resetLook = (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      if (e.changedTouches[i].identifier === lookTouchId) {
+        lookTouchId = null;
+      }
+    }
+  };
+  lookZone.addEventListener('touchend', resetLook);
+  lookZone.addEventListener('touchcancel', resetLook);
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// --- インタラクト処理（拾う / 発射） ---
+function handleInteract() {
+  if (!isGameRunning || !currentInteractTarget) return;
+
+  if (currentInteractTarget.type === 'ball') {
+    if (!hasBall) {
+      hasBall = true;
+      audio.playPickup();
+      currentInteractTarget.ballMesh.visible = false;
+      currentInteractTarget.ballMesh.userData.isPicked = true;
+      document.getElementById('inventory-status').innerText = '所持品: 砲弾 [1/1]';
+      hidePrompt();
+    }
+  } else if (currentInteractTarget.type === 'cannon') {
+    if (hasBall && !currentInteractTarget.cannonMesh.userData.isFired) {
+      // 発射
+      hasBall = false;
+      currentInteractTarget.cannonMesh.userData.isFired = true;
+      audio.playCannon();
+      document.getElementById('inventory-status').innerText = '所持品: なし';
+
+      // 大砲から煙＆破損表現
+      createSmoke(currentInteractTarget.cannonMesh.position);
+      currentInteractTarget.cannonMesh.children[1].material.color.set(0x111111);
+
+      // 自動誘導砲弾を発射
+      fireHomingProjectile(currentInteractTarget.cannonMesh.position);
+      hidePrompt();
+    }
+  }
+}
+
+// 自動誘導弾の発射（必ず羽根に着弾）
+function fireHomingProjectile(startPos) {
+  const pGeo = new THREE.SphereGeometry(0.65, 8, 8);
+  const pMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+  const proj = new THREE.Mesh(pGeo, pMat);
+  proj.position.copy(startPos);
+  proj.position.y += 1.8;
+  scene.add(proj);
+
+  // 着弾対象となる羽根を1つ選定
+  const targetWing = windmillWings.find(w => w.userData.isAlive);
+
+  flyingProjectiles.push({
+    mesh: proj,
+    targetWing: targetWing,
+    targetPos: windmillFace.position,
+    progress: 0,
+    startPos: proj.position.clone()
+  });
+}
+
+// 大砲破損の煙パーティクル
+function createSmoke(pos) {
+  for (let i = 0; i < 15; i++) {
+    const sGeo = new THREE.SphereGeometry(0.35 + Math.random() * 0.3, 6, 6);
+    const sMat = new THREE.MeshBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.8 });
+    const smoke = new THREE.Mesh(sGeo, sMat);
+    smoke.position.set(
+      pos.x + (Math.random() - 0.5) * 1.5,
+      pos.y + 1.2 + Math.random() * 0.5,
+      pos.z + (Math.random() - 0.5) * 1.5
+    );
+    scene.add(smoke);
+
+    const fade = setInterval(() => {
+      smoke.position.y += 0.05;
+      smoke.scale.multiplyScalar(1.03);
+      smoke.material.opacity -= 0.04;
+      if (smoke.material.opacity <= 0) {
+        clearInterval(fade);
+        scene.remove(smoke);
+      }
+    }, 45);
+  }
+}
+
+// 認識開始トリガー
+function triggerRecognition() {
+  if (isRecognized) return;
+  isRecognized = true;
+  audio.playAlarm();
+
+  // 警告表示
+  const alertEl = document.getElementById('alert-banner');
+  alertEl.style.display = 'block';
+  setTimeout(() => { alertEl.style.display = 'none'; }, 2200);
+
+  // 羽根の画像を「🫵」に変更
+  windmillWings.forEach(wing => {
+    wing.material.map = textures.hand_point;
+    wing.material.needsUpdate = true;
+  });
+}
+
+// 羽根の破壊処理
+function damageWindmill(wing) {
+  if (!wing || !wing.userData.isAlive) return;
+
+  wing.userData.isAlive = false;
+  wing.visible = false;
+  windmillState.activeWings--;
+
+  // 羽根がすべて破壊されたら
+  if (windmillState.activeWings <= 0) {
+    windmillState.isFleeing = true;
+    // 表情を恐怖（😱）に変更
+    windmillFace.material.map = textures.face_scared;
+    windmillFace.material.needsUpdate = true;
+
+    // 黒い出口を壁に出現させる
+    exitDoorMesh.visible = true;
+  }
+}
+
+// プロンプトUIの制御
+function showPrompt(text) {
+  const p = document.getElementById('interact-prompt');
+  p.innerText = text;
+  p.style.display = 'block';
+
+  if (isMobile) {
+    const btn = document.getElementById('action-btn-mobile');
+    btn.style.display = 'flex';
+    btn.innerText = text.includes('発射') ? '発射' : '拾う';
+  }
+}
+
+function hidePrompt() {
+  document.getElementById('interact-prompt').style.display = 'none';
+  document.getElementById('action-btn-mobile').style.display = 'none';
+  currentInteractTarget = null;
+}
+
+// --- ゲーム開始・終了 ---
+function startGame() {
+  audio.init();
+  document.getElementById('screen-overlay').style.display = 'none';
+  isGameRunning = true;
+}
+
+function gameOver() {
+  isGameRunning = false;
+  const overlay = document.getElementById('screen-overlay');
+  const title = document.getElementById('screen-title');
+  const desc = document.getElementById('screen-desc');
+  const btn = document.getElementById('start-btn');
+
+  overlay.style.display = 'flex';
+  title.innerText = '捕捉されました';
+  title.style.color = '#ff2222';
+  desc.innerHTML = 'あなたは風車の一部となり、永遠にこの青空を回り続けます。<br>逃げ場はありませんでした。';
+  btn.innerText = 'もう一度最初から';
+  btn.onclick = () => location.reload();
+}
+
+function gameClear() {
+  isGameRunning = false;
+  isEscaped = true;
+  const overlay = document.getElementById('screen-overlay');
+  const title = document.getElementById('screen-title');
+  const desc = document.getElementById('screen-desc');
+  const btn = document.getElementById('start-btn');
+
+  overlay.style.display = 'flex';
+  title.innerText = '脱出成功';
+  title.style.color = '#66ff88';
+  desc.innerHTML = '黒い穴の先は、冷たい現実の闇でした。<br>偽りの青空とあの視線は、もうあなたを追うことはありません。';
+  btn.innerText = 'タイトルへ戻る';
+  btn.onclick = () => location.reload();
+}
+
+// --- 更新ループ（低FPS監視カメラ風処理） ---
+let lastRenderTime = 0;
+const TARGET_FPS = 22; // レトロな監視カメラ／カクカク感を生むフレームレート
+const FRAME_INTERVAL = 1000 / TARGET_FPS;
+
+function animate(currentTime) {
+  requestAnimationFrame(animate);
+
+  const delta = currentTime - lastRenderTime;
+  if (delta < FRAME_INTERVAL) return; // FPS制限ウェイト
+  lastRenderTime = currentTime - (delta % FRAME_INTERVAL);
+
+  if (isGameRunning) {
+    updatePlayer();
+    updateWindmill();
+    updateProjectiles();
+    checkInteractions();
+    checkExitTrigger();
+  }
+
+  renderer.render(scene, camera);
+}
+
+// プレイヤーの移動
+function updatePlayer() {
+  let moveX = 0;
+  let moveZ = 0;
+
+  if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+  if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+  if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+  if (touchState.active) {
+    moveX = touchState.moveX;
+    moveZ = touchState.moveY;
+  }
+
+  if (moveX !== 0 || moveZ !== 0) {
+    const len = Math.hypot(moveX, moveZ);
+    const dirX = (moveX / len) * player.speed;
+    const dirZ = (moveZ / len) * player.speed;
+
+    // カメラYaw角に合わせた移動ベクトル
+    const sin = Math.sin(player.rot.yaw);
+    const cos = Math.cos(player.rot.yaw);
+
+    player.pos.x += dirX * cos - dirZ * sin;
+    player.pos.z += dirX * sin + dirZ * cos;
+
+    // 部屋の外壁との衝突判定
+    const limit = (ROOM_SIZE / 2) - 1.5;
+    player.pos.x = Math.max(-limit, Math.min(limit, player.pos.x));
+    player.pos.z = Math.max(-limit, Math.min(limit, player.pos.z));
+  }
+
+  // 小屋の外に出た判定（z < 47 で完全に出たと認識）
+  if (!isRecognized && player.pos.z < 47) {
+    triggerRecognition();
+  }
+
+  // カメラへ反映
+  camera.position.copy(player.pos);
+  const lookDir = new THREE.Vector3(
+    Math.sin(player.rot.yaw) * Math.cos(player.rot.pitch),
+    Math.sin(player.rot.pitch),
+    -Math.cos(player.rot.yaw) * Math.cos(player.rot.pitch)
+  );
+  camera.lookAt(player.pos.clone().add(lookDir));
+}
+
+// キチガイ風車の状態更新・追跡・アニメーション
+function updateWindmill() {
+  const wp = windmillGroup.position;
+
+  if (!isRecognized) {
+    // 1. 小屋の中にいる間：通常時（低速回転・待機）
+    windmillState.rotAngle += 0.03;
+  } else if (!windmillState.isFleeing) {
+    // 2. 認識後：激しく回転・プレイヤーへ執拗に追跡
+    windmillState.rotAngle += 0.18;
+
+    // プレイヤー追跡（プレイヤーよりわずかに遅い速度）
+    const toPlayer = new THREE.Vector2(player.pos.x - wp.x, player.pos.z - wp.z);
+    const dist = toPlayer.length();
+
+    if (dist > 1.2) {
+      toPlayer.normalize();
+      wp.x += toPlayer.x * (player.speed * 0.72);
+      wp.z += toPlayer.y * (player.speed * 0.72);
+    } else {
+      // プレイヤーに追いついたらゲームオーバー
+      gameOver();
+    }
+  } else {
+    // 4. 逃走時：逆方向に全力で逃走
+    const away = new THREE.Vector2(wp.x - player.pos.x, wp.z - player.pos.z).normalize();
+    wp.x += away.x * (player.speed * 1.5);
+    wp.z += away.y * (player.speed * 1.5);
+
+    // 空間端に到達したら消滅
+    if (Math.abs(wp.x) > ROOM_SIZE / 2 - 2 || Math.abs(wp.z) > ROOM_SIZE / 2 - 2) {
+      windmillGroup.visible = false;
+    }
+  }
+
+  // 羽根の回転位置更新
+  const radius = 5.2;
+  const faceY = windmillFace.position.y;
+
+  windmillWings.forEach((wing) => {
+    if (!wing.userData.isAlive) return;
+
+    // 4本の基本角度 (0, 90, 180, 270度) + 現在の回転角
+    const baseAng = (wing.userData.angleIndex * Math.PI) / 2;
+    const currentAng = baseAng + windmillState.rotAngle;
+
+    wing.position.set(
+      Math.sin(currentAng) * radius,
+      faceY + Math.cos(currentAng) * radius,
+      0
+    );
+  });
+}
+
+// 誘導砲弾の軌道更新
+function updateProjectiles() {
+  for (let i = flyingProjectiles.length - 1; i >= 0; i--) {
+    const p = flyingProjectiles[i];
+    p.progress += 0.055;
+
+    // 風車の中心・羽根のワールド座標へ補間
+    const targetWorld = new THREE.Vector3();
+    if (p.targetWing && p.targetWing.userData.isAlive) {
+      p.targetWing.getWorldPosition(targetWorld);
+    } else {
+      windmillFace.getWorldPosition(targetWorld);
+    }
+
+    // ベジェ風のゆるやかな放物線
+    p.mesh.position.lerpVectors(p.startPos, targetWorld, p.progress);
+    p.mesh.position.y += Math.sin(p.progress * Math.PI) * 4.0;
+
+    // 着弾
+    if (p.progress >= 1.0) {
+      scene.remove(p.mesh);
+      flyingProjectiles.splice(i, 1);
+      damageWindmill(p.targetWing);
+      createHitEffect(targetWorld);
+    }
+  }
+}
+
+// 着弾時の爆発エフェクト
+function createHitEffect(pos) {
+  for (let i = 0; i < 20; i++) {
+    const geo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff4411 });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    scene.add(p);
+
+    const dir = new THREE.Vector3(
+      (Math.random() - 0.5) * 2,
+      (Math.random() - 0.5) * 2,
+      (Math.random() - 0.5) * 2
+    ).normalize().multiplyScalar(0.2);
+
+    let life = 18;
+    const timer = setInterval(() => {
+      p.position.add(dir);
+      life--;
+      if (life <= 0) {
+        clearInterval(timer);
+        scene.remove(p);
+      }
+    }, 40);
+  }
+}
+
+// 接近時のインタラクト判定（弾・大砲）
+function checkInteractions() {
+  let detected = null;
+
+  // 1. 未取得の弾が近くにあるか
+  for (const b of balls) {
+    if (!b.userData.isPicked) {
+      const dist = player.pos.distanceTo(b.position);
+      if (dist < 3.2) {
+        detected = { type: 'ball', ballMesh: b };
+        showPrompt(isMobile ? '砲弾を拾う' : '[E] 砲弾を拾う');
+        break;
+      }
+    }
+  }
+
+  // 2. 弾を持っており、未発射の大砲が近くにあるか
+  if (!detected && hasBall) {
+    for (const c of cannons) {
+      if (!c.userData.isFired) {
+        const dist = player.pos.distanceTo(c.position);
+        if (dist < 4.2) {
+          detected = { type: 'cannon', cannonMesh: c };
+          showPrompt(isMobile ? '大砲を発射' : '[E] 大砲を発射');
+          break;
+        }
+      }
+    }
+  }
+
+  if (!detected && currentInteractTarget) {
+    hidePrompt();
+  }
+  currentInteractTarget = detected;
+}
+
+// 脱出扉への到達判定
+function checkExitTrigger() {
+  if (exitDoorMesh && exitDoorMesh.visible && !isEscaped) {
+    const dist = player.pos.distanceTo(exitDoorMesh.position);
+    if (dist < 4.5) {
+      gameClear();
+    }
+  }
+}
+
+// --- エントリーポイント ---
+window.onload = () => {
+  initScene();
+  setupControls();
+  requestAnimationFrame(animate);
+};
+</script>
+</body>
+</html>
